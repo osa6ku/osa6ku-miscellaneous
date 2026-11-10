@@ -7,10 +7,22 @@ const SECRET = PROPS.getProperty("SWITCHBOT_SECRET"); // クライアントシ�
 
 const LOCK_DEVICE_ID = "B0E9FE686D90";  // ロックウルトラのデバイスID（/v1.1/devices で確認: Smart Lock Ultra「ドアロック」）
 const BOT_DEVICE_ID = "D8BFC586182C";    // ボットのデバイスID（/v1.1/devices で確認: Bot「オートロック」）
+
+// 温湿度取得デバイス（メインの Hub 3 を先頭に優先表示）
+const TEMP_DEVICES = [
+  { id: "B0E9FEE51418", name: "hub318" },         // Hub 3
+  { id: "B0E9FE90904E", name: "温湿度計Pro 4E" }, // MeterPro
+  { id: "DF1CDDF11EC9", name: "ハブ２ C9" }       // Hub 2
+];
 // =============================================
 
 function doGet(e) {
-  const target = (e && e.parameter) ? e.parameter.target : undefined;
+  const target = (e && e.parameter && e.parameter.target) ? e.parameter.target : "status";
+
+  if (target === "status") {
+    return ContentService.createTextOutput(getHomeStatus());
+  }
+
   let deviceId = "";
   let command = "";
 
@@ -23,29 +35,98 @@ function doGet(e) {
     deviceId = BOT_DEVICE_ID;
     command = "press";
   } else {
-    return ContentService.createTextOutput("Error: Invalid target parameter (?target=lock or ?target=bot)");
+    return ContentService.createTextOutput("Error: Invalid target parameter (?target=status, ?target=lock, or ?target=bot)");
   }
 
   const result = callSwitchBotApi(deviceId, command);
   return ContentService.createTextOutput(result);
 }
 
-function callSwitchBotApi(deviceId, command) {
-  if (!TOKEN || !SECRET) {
-    return "Error: SWITCHBOT_TOKEN / SWITCHBOT_SECRET がスクリプトプロパティに未設定です";
-  }
+function buildSwitchBotHeaders() {
   const t = Date.now().toString();
   const nonce = Utilities.getUuid();
   const data = TOKEN + t + nonce;
   const signature = Utilities.computeHmacSha256Signature(data, SECRET);
   const sign = Utilities.base64Encode(signature);
 
-  const headers = {
+  return {
     "Authorization": TOKEN,
     "sign": sign,
     "nonce": nonce,
     "t": t
   };
+}
+
+function parseSwitchBotResponse(res) {
+  const httpCode = res.getResponseCode();
+  const resBody = res.getContentText();
+  if (httpCode !== 200) {
+    return { ok: false, error: `HTTP ${httpCode} - ${resBody}`, raw: resBody };
+  }
+  try {
+    const json = JSON.parse(resBody);
+    if (json && json.statusCode === 100) {
+      return { ok: true, json: json, raw: resBody };
+    }
+    return { ok: false, error: resBody, raw: resBody };
+  } catch (parseErr) {
+    return { ok: false, error: resBody, raw: resBody };
+  }
+}
+
+function getHomeStatus() {
+  if (!TOKEN || !SECRET) {
+    return "Error: SWITCHBOT_TOKEN / SWITCHBOT_SECRET がスクリプトプロパティに未設定です";
+  }
+
+  const targets = TEMP_DEVICES.concat([{ id: LOCK_DEVICE_ID, name: "ドアロック" }]);
+  const requests = targets.map(function (dev) {
+    return {
+      url: `https://api.switch-bot.com/v1.1/devices/${dev.id}/status`,
+      method: "get",
+      headers: buildSwitchBotHeaders(),
+      muteHttpExceptions: true
+    };
+  });
+
+  try {
+    const responses = UrlFetchApp.fetchAll(requests);
+    const lines = [];
+
+    for (let i = 0; i < TEMP_DEVICES.length; i++) {
+      const dev = TEMP_DEVICES[i];
+      const parsed = parseSwitchBotResponse(responses[i]);
+      if (parsed.ok && parsed.json.body) {
+        const b = parsed.json.body;
+        lines.push(`🌡 ${b.temperature}℃ / ${b.humidity}% (${dev.name})`);
+      } else {
+        lines.push(`🌡 ERROR (${dev.name}): ${parsed.error}`);
+      }
+    }
+
+    const lockParsed = parseSwitchBotResponse(responses[TEMP_DEVICES.length]);
+    if (lockParsed.ok && lockParsed.json.body) {
+      const lb = lockParsed.json.body;
+      const lockState = (lb.lockState || "UNKNOWN").toUpperCase();
+      const doorState = (lb.doorState || "UNKNOWN").toUpperCase();
+      const lockIcon = lockState === "UNLOCKED" ? "🔓" : "🔒";
+      const battery = (lb.battery !== undefined && lb.battery !== null) ? lb.battery : "?";
+      lines.push(`${lockIcon} ${lockState} (${doorState})`);
+      lines.push(`🔋 Lock: ${battery}%`);
+    } else {
+      lines.push(`🔒 ERROR (Lock): ${lockParsed.error}`);
+    }
+
+    return lines.join("\n");
+  } catch (err) {
+    return `EXCEPTION: ${err.message}`;
+  }
+}
+
+function callSwitchBotApi(deviceId, command) {
+  if (!TOKEN || !SECRET) {
+    return "Error: SWITCHBOT_TOKEN / SWITCHBOT_SECRET がスクリプトプロパティに未設定です";
+  }
 
   const payload = JSON.stringify({
     "command": command,
@@ -58,37 +139,23 @@ function callSwitchBotApi(deviceId, command) {
   try {
     const res = UrlFetchApp.fetch(url, {
       method: "post",
-      headers: headers,
+      headers: buildSwitchBotHeaders(),
       contentType: "application/json", // ← HTTP 415を防ぐ必須指定
       payload: payload,
       muteHttpExceptions: true
     });
 
-    const statusCode = res.getResponseCode();
-    const resBody = res.getContentText();
-
-    if (statusCode !== 200) {
-      return `FAILED: HTTP ${statusCode} - ${resBody}`;
-    }
-
-    // HTTP 200 でも SwitchBot API 内部の statusCode が 100 以外なら失敗
-    // （例: 160 クラウドサービス無効, 161/171 デバイス/ハブオフライン, 190 デバイスID不一致等）
-    let json;
-    try {
-      json = JSON.parse(resBody);
-    } catch (parseErr) {
-      return resBody;
-    }
-    if (json && json.statusCode === 100) {
-      return "OK: " + command;
-    }
-    return resBody;
+    const parsed = parseSwitchBotResponse(res);
+    return parsed.ok ? ("OK: " + command) : parsed.error;
   } catch (err) {
     return `EXCEPTION: ${err.message}`;
   }
 }
 
 // 動作確認用テスト関数（エディタ上で直接実行可能）
+function testStatus() {
+  Logger.log(getHomeStatus());
+}
 function testUnlock() {
   Logger.log(callSwitchBotApi(LOCK_DEVICE_ID, "unlock"));
 }
