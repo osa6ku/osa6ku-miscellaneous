@@ -92,6 +92,7 @@ function getHomeStatus() {
   try {
     const responses = UrlFetchApp.fetchAll(requests);
     const lines = [];
+    const lightParts = [];
 
     for (let i = 0; i < TEMP_DEVICES.length; i++) {
       const dev = TEMP_DEVICES[i];
@@ -99,9 +100,16 @@ function getHomeStatus() {
       if (parsed.ok && parsed.json.body) {
         const b = parsed.json.body;
         lines.push(`🌡 ${b.temperature}℃ / ${b.humidity}% (${dev.name})`);
+        if (b.lightLevel !== undefined && b.lightLevel !== null) {
+          lightParts.push(`${b.lightLevel} (${dev.name})`);
+        }
       } else {
         lines.push(`🌡 ERROR (${dev.name}): ${parsed.error}`);
       }
+    }
+
+    if (lightParts.length > 0) {
+      lines.push(`💡 照度: ${lightParts.join(" / ")}`);
     }
 
     const lockParsed = parseSwitchBotResponse(responses[TEMP_DEVICES.length]);
