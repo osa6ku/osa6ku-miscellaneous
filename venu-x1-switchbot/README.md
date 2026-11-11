@@ -4,7 +4,7 @@ Garmin Venu X1 の HTTP リクエスト系ウィジェットから Google Apps S
 
 | パラメータ | 対象デバイス / 処理 | 動作 |
 | --- | --- | --- |
-| `?target=status`（またはパラメータ無し） | 温湿度・照度デバイス（Hub 3 / 温湿度計Pro 4E / Hub 2）＋ロックウルトラ | 温度・湿度・照度・施錠・ドア・バッテリー状態をプレーンテキスト返却 |
+| `?target=status`（またはパラメータ無し） | 温湿度・照度デバイス（Hub 3 / 温湿度計Pro 4E）＋ロックウルトラ | 温度・湿度・照度・施錠・ドア・バッテリー状態をプレーンテキスト返却 |
 | `?target=lock`（後方互換） | SwitchBot ロックウルトラ | `unlock`（解錠） |
 | `?target=bot`（後方互換） | SwitchBot ボット | `press`（プッシュ動作） |
 
@@ -21,9 +21,8 @@ Garmin Venu X1 の HTTP リクエスト系ウィジェットから Google Apps S
 - ステータス一覧（`?target=status` / デフォルト）:
   ```text
   🌡 21.4℃ / 64% (hub318)
-  🌡 22.1℃ / 59% (温湿度計Pro 4E)
-  🌡 22.1℃ / 41% (ハブ２ C9)
-  💡 照度: 1 (hub318) / 12 (ハブ２ C9)
+  🌡 21.3℃ / 61% (温湿度計Pro 4E)
+  💡 照度: 1 (hub318)
   🔒 LOCKED (CLOSED)
   🔋 Lock: 48%
   ```

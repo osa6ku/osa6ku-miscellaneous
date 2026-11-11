@@ -11,8 +11,7 @@ const BOT_DEVICE_ID = "D8BFC586182C";    // ボットのデバイスID（/v1.1/d
 // 温湿度取得デバイス（メインの Hub 3 を先頭に優先表示）
 const TEMP_DEVICES = [
   { id: "B0E9FEE51418", name: "hub318" },         // Hub 3
-  { id: "B0E9FE90904E", name: "温湿度計Pro 4E" }, // MeterPro
-  { id: "DF1CDDF11EC9", name: "ハブ２ C9" }       // Hub 2
+  { id: "B0E9FE90904E", name: "温湿度計Pro 4E" }  // MeterPro
 ];
 // =============================================
 
