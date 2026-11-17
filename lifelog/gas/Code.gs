@@ -268,10 +268,39 @@ function fetchWikipediaInfo_(title) {
 // Web アプリ (HTMLService) エンドポイント & API
 // ============================================================================
 
-function doGet() {
+function doGet(e) {
+  const api = e && e.parameter && e.parameter.api;
+  if (api === 'watch') {
+    const entries = getWatchEntries();
+    return jsonResponse_({ ok: true, count: entries.length, entries });
+  }
+  if (api === 'diary') {
+    const limit = Number((e.parameter && e.parameter.limit) || 120);
+    const entries = getDiaryEntries(limit);
+    return jsonResponse_({ ok: true, count: entries.length, entries });
+  }
   return HtmlService.createHtmlOutputFromFile('index')
     .setTitle('ライフログ・ダッシュボード')
-    .addMetaTag('viewport', 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no');
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no')
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+function doPost(e) {
+  try {
+    const body = JSON.parse((e && e.postData && e.postData.contents) || '{}');
+    const action = body.action;
+    if (action === 'addWatch') return jsonResponse_(addWatchEntry(body.payload || {}));
+    if (action === 'updateWatch') return jsonResponse_(updateWatchCard(body.payload || {}));
+    if (action === 'addDiary') return jsonResponse_(addDiaryEntry(body.payload || {}));
+    return jsonResponse_({ ok: false, error: 'Unknown action: ' + action });
+  } catch (err) {
+    return jsonResponse_({ ok: false, error: String(err) });
+  }
+}
+
+function jsonResponse_(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj))
+    .setMimeType(ContentService.MimeType.JSON);
 }
 
 function getWatchEntries() {
