@@ -16,3 +16,10 @@ Apple iOS「ジャーナル」アプリのエクスポートデータ（`AppleJo
 
 4. **`create_journal_docs.py`**
    - Google ドライブ `50_ライフログ/journal_docs/` 配下に年別アーカイブドキュメント（`日記アーカイブ_YYYY`）を生成。
+
+5. **`notion_import_and_wiki.py`**（フェーズ2）
+   - Notion「鑑賞記録」DB（914件）および「タグ」DB（2,243件）のエクスポートデータを正規化（`PLATFORM_TARGETS` による表記揺れ統一・映画館判定・主要キャスト最大20名制限）。
+   - 未取得作品について Wikipedia API（`User-Agent` ヘッダー付き）から公開年・放送局/配信・キャスト・スタッフ・概要を補完し、Google スプレッドシート `ライフログ_鑑賞記録DB` へ格納。
+
+6. **`gas/Code.gs`**（フェーズ2・Google Apps Script）
+   - `ライフログ_鑑賞記録DB` 用のカスタムメニューおよびスマホ対応チェックボックストリガーによる Wikipedia 自動補完・プラットフォーム正規化スクリプト。
