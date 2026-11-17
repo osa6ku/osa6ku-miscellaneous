@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>ライフログ・ダッシュボード</title>
+  <style>
+    :root {
+      --bg: #f4f6f9;
+      --card: #ffffff;
+      --primary: #1a73e8;
+      --accent: #0f9d58;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --border: #e5e7eb;
+      --radius: 14px;
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    body {
+      margin: 0; padding: 0 0 84px 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif;
+      background: var(--bg); color: var(--text); font-size: 15px; line-height: 1.5;
+    }
+    header {
+      position: sticky; top: 0; z-index: 20;
+      background: #ffffff; border-bottom: 1px solid var(--border);
+      padding: 10px 14px;
+    }
+    .header-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .app-title { font-size: 17px; font-weight: 700; margin: 0; }
+    .quick-links { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+    .q-link {
+      font-size: 11px; padding: 4px 8px; border-radius: 999px;
+      background: #eef2ff; color: #1d4ed8; text-decoration: none; font-weight: 600;
+    }
+    .action-bar { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+    .btn-big {
+      border: none; border-radius: 10px; padding: 10px 12px;
+      font-size: 14px; font-weight: 700; cursor: pointer; color: #fff;
+      display: flex; align-items: center; justify-content: center; gap: 4px;
+    }
+    .btn-watch { background: var(--primary); }
+    .btn-diary { background: var(--accent); }
+
+    .container { max-width: 680px; margin: 0 auto; padding: 12px; }
+
+    .search-row { display: flex; gap: 8px; margin-bottom: 10px; }
+    .search-input {
+      flex: 1; padding: 10px 12px; border: 1px solid var(--border);
+      border-radius: 10px; font-size: 15px; background: #fff;
+    }
+    .sort-select {
+      padding: 8px 10px; border: 1px solid var(--border);
+      border-radius: 10px; font-size: 13px; background: #fff;
+    }
+
+    .chips {
+      display: flex; gap: 6px; overflow-x: auto; padding-bottom: 6px;
+      margin-bottom: 8px; scrollbar-width: none;
+    }
+    .chips::-webkit-scrollbar { display: none; }
+    .chip {
+      flex: 0 0 auto; padding: 6px 12px; border-radius: 999px;
+      border: 1px solid var(--border); background: #fff;
+      font-size: 13px; font-weight: 600; color: var(--text); cursor: pointer;
+    }
+    .chip.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+    .chip.active-green { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+    .count-bar { font-size: 12px; color: var(--muted); margin: 4px 2px 10px; }
+
+    .card {
+      background: var(--card); border-radius: var(--radius);
+      padding: 14px; margin-bottom: 10px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06); border: 1px solid var(--border);
+    }
+    .card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+    .card-title { font-size: 16px; font-weight: 700; margin: 0; }
+    .badge {
+      font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 999px;
+      white-space: nowrap;
+    }
+    .b-inprog { background: #dbeafe; color: #1d4ed8; }
+    .b-done { background: #dcfce7; color: #15803d; }
+    .b-todo { background: #f3f4f6; color: #4b5563; }
+
+    .meta-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; font-size: 12px; color: var(--muted); }
+    .tag-pill { background: #f3f4f6; padding: 2px 8px; border-radius: 6px; color: #374151; }
+    .card-cast { font-size: 12px; color: #4b5563; margin-top: 8px; }
+    .card-summary { font-size: 13px; color: #374151; margin-top: 8px; background: #f9fafb; padding: 8px 10px; border-radius: 8px; }
+    .card-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; padding-top: 10px; border-top: 1px solid #f3f4f6; }
+    .btn-sm {
+      font-size: 12px; font-weight: 600; padding: 6px 10px; border-radius: 8px;
+      border: 1px solid var(--border); background: #fff; cursor: pointer; color: var(--text);
+    }
+    .btn-sm.primary { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
+    .btn-sm.success { background: #ecfdf5; color: #047857; border-color: #a7f3d0; }
+
+    .bottom-nav {
+      position: fixed; bottom: 0; left: 0; right: 0; z-index: 30;
+      background: #fff; border-top: 1px solid var(--border);
+      display: grid; grid-template-columns: 1fr 1fr; height: 60px;
+    }
+    .nav-btn {
+      border: none; background: none; font-size: 13px; font-weight: 700;
+      color: var(--muted); cursor: pointer; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 2px;
+    }
+    .nav-btn.active { color: var(--primary); }
+
+    .modal-backdrop {
+      display: none; position: fixed; inset: 0; z-index: 50;
+      background: rgba(0,0,0,0.45); align-items: flex-end; justify-content: center;
+    }
+    .modal-backdrop.open { display: flex; }
+    .modal {
+      background: #fff; width: 100%; max-width: 680px; max-height: 90vh;
+      overflow-y: auto; border-radius: 18px 18px 0 0; padding: 18px 16px 28px;
+    }
+    .modal-title { font-size: 17px; font-weight: 700; margin: 0 0 12px; display: flex; justify-content: space-between; }
+    .field { margin-bottom: 12px; }
+    .field label { display: block; font-size: 12px; font-weight: 700; color: var(--muted); margin-bottom: 4px; }
+    .field input, .field select, .field textarea {
+      width: 100%; padding: 10px; border: 1px solid var(--border);
+      border-radius: 10px; font-size: 15px; font-family: inherit;
+    }
+    .loading { text-align: center; padding: 32px; color: var(--muted); }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-top">
+    <h1 class="app-title">📚 ライフログ・ダッシュボード</h1>
+  </div>
+  <div class="quick-links">
+    <a class="q-link" target="_blank" href="https://docs.google.com/spreadsheets/d/1dvf7aVJA_B8SgkIB1qGzJztZ6hRPiA7SLb0xssY142E/edit">🎬 鑑賞記録DB</a>
+    <a class="q-link" target="_blank" href="https://docs.google.com/spreadsheets/d/1_UnbcNhxtEkV7vLagxreIeyELbY3NBLU5bS8pp4YQ1A/edit">📓 日記DB</a>
+    <a class="q-link" target="_blank" href="https://drive.google.com/drive/folders/1GqzKeXduc0UF-3Mb8nihfs3SVMSbOPSI">📂 年別Doc</a>
+  </div>
+  <div class="action-bar">
+    <button class="btn-big btn-watch" onclick="openWatchModal()">＋ 鑑賞記録を追加</button>
+    <button class="btn-big btn-diary" onclick="openDiaryModal()">＋ 日記を書く</button>
+  </div>
+</header>
+
+<main class="container">
+  <!-- 鑑賞記録ビュー -->
+  <section id="view-watch">
+    <div class="search-row">
+      <input class="search-input" id="watch-search" type="search" placeholder="タイトル・キャスト・メモを検索..." oninput="renderWatch()">
+      <select class="sort-select" id="watch-sort" onchange="renderWatch()">
+        <option value="date_desc">鑑賞日順</option>
+        <option value="rating_desc">評価順</option>
+      </select>
+    </div>
+
+    <div class="chips" id="status-chips">
+      <button class="chip active" data-val="進行中" onclick="setStatusFilter('進行中', this)">▶ 進行中</button>
+      <button class="chip" data-val="完了" onclick="setStatusFilter('完了', this)">✅ 完了</button>
+      <button class="chip" data-val="未着手" onclick="setStatusFilter('未着手', this)">📌 観たい/未着手</button>
+      <button class="chip" data-val="ALL" onclick="setStatusFilter('ALL', this)">すべて</button>
+    </div>
+
+    <div class="chips" id="cat-chips">
+      <button class="chip active-green" data-val="ALL" onclick="setCatFilter('ALL', this)">全区分</button>
+      <button class="chip" data-val="ドラマ" onclick="setCatFilter('ドラマ', this)">ドラマ</button>
+      <button class="chip" data-val="映画" onclick="setCatFilter('映画', this)">映画</button>
+      <button class="chip" data-val="アニメ" onclick="setCatFilter('アニメ', this)">アニメ</button>
+      <button class="chip" data-val="本" onclick="setCatFilter('本', this)">本</button>
+      <button class="chip" data-val="Netflix" onclick="setPlatFilter('Netflix', this)">Netflix</button>
+      <button class="chip" data-val="Amazon Prime Video" onclick="setPlatFilter('Amazon Prime Video', this)">Prime Video</button>
+      <button class="chip" data-val="U-NEXT" onclick="setPlatFilter('U-NEXT', this)">U-NEXT</button>
+      <button class="chip" data-val="映画館" onclick="setPlatFilter('映画館', this)">映画館</button>
+    </div>
+
+    <div class="count-bar" id="watch-count">読み込み中...</div>
+    <div id="watch-list"><div class="loading">鑑賞記録を読み込んでいます...</div></div>
+  </section>
+
+  <!-- 日記ビュー -->
+  <section id="view-diary" style="display:none;">
+    <div class="search-row">
+      <input class="search-input" id="diary-search" type="search" placeholder="日記のタイトル・本文・場所を検索..." oninput="renderDiary()">
+      <input class="sort-select" id="diary-ym" type="month" onchange="renderDiary()" title="年月ジャンプ">
+    </div>
+    <div class="count-bar" id="diary-count">読み込み中...</div>
+    <div id="diary-list"><div class="loading">日記を読み込んでいます...</div></div>
+  </section>
+</main>
+
+<nav class="bottom-nav">
+  <button class="nav-btn active" id="nav-watch" onclick="switchTab('watch')">
+    <span>🎬</span><span>鑑賞記録</span>
+  </button>
+  <button class="nav-btn" id="nav-diary" onclick="switchTab('diary')">
+    <span>📓</span><span>日記タイムライン</span>
+  </button>
+</nav>
+
+<!-- 鑑賞記録 追記モーダル -->
+<div class="modal-backdrop" id="modal-watch">
+  <div class="modal">
+    <div class="modal-title">
+      <span>🎬 鑑賞記録を追加</span>
+      <button class="btn-sm" onclick="closeModals()">✕</button>
+    </div>
+    <div class="field"><label>タイトル *</label><input id="w-title" placeholder="例: ドラマ『...』"></div>
+    <div class="field">
+      <label>区分</label>
+      <select id="w-cat">
+        <option value="ドラマ">ドラマ</option>
+        <option value="映画">映画</option>
+        <option value="アニメ">アニメ</option>
+        <option value="本">本</option>
+        <option value="その他">その他</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>プラットフォーム（カンマ区切り可）</label>
+      <input id="w-plat" placeholder="例: Netflix, 映画館, TBS">
+    </div>
+    <div class="field">
+      <label>ステータス</label>
+      <select id="w-status">
+        <option value="進行中" selected>進行中</option>
+        <option value="完了">完了</option>
+        <option value="未着手">未着手</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>評価（1〜5）</label>
+      <select id="w-rating">
+        <option value="">未評価</option>
+        <option value="5">★★★★★ (5)</option>
+        <option value="4">★★★★ (4)</option>
+        <option value="3">★★★ (3)</option>
+        <option value="2">★★ (2)</option>
+        <option value="1">★ (1)</option>
+      </select>
+    </div>
+    <div class="field"><label>鑑賞日</label><input id="w-date" type="date"></div>
+    <div class="field"><label>メモ・感想</label><textarea id="w-memo" rows="3"></textarea></div>
+    <div class="field">
+      <label><input type="checkbox" id="w-wiki" checked style="width:auto;"> 登録時にWikipediaからキャスト・概要を自動補完する</label>
+    </div>
+    <button class="btn-big btn-watch" style="width:100%;" id="btn-save-watch" onclick="submitWatch()">保存する</button>
+  </div>
+</div>
+
+<!-- 日記 追記モーダル -->
+<div class="modal-backdrop" id="modal-diary">
+  <div class="modal">
+    <div class="modal-title">
+      <span>📓 日記を書く</span>
+      <button class="btn-sm" onclick="closeModals()">✕</button>
+    </div>
+    <div class="field"><label>日付</label><input id="d-date" type="date"></div>
+    <div class="field"><label>タイトル</label><input id="d-title" placeholder="今日のタイトル"></div>
+    <div class="field"><label>場所</label><input id="d-loc" placeholder="例: 自宅、渋谷など"></div>
+    <div class="field"><label>本文 *</label><textarea id="d-body" rows="5" placeholder="出来事やメモ..."></textarea></div>
+    <div class="field">
+      <label>写真（自動で1200px以下にリサイズしてDrive保存）</label>
+      <input id="d-photos" type="file" accept="image/*" multiple>
+    </div>
+    <button class="btn-big btn-diary" style="width:100%;" id="btn-save-diary" onclick="submitDiary()">日記を保存する</button>
+  </div>
+</div>
+
+<script>
+let watchData = [];
+let diaryData = [];
+let statusFilter = '進行中';
+let catFilter = 'ALL';
+let platFilter = 'ALL';
+
+window.onload = () => {
+  const today = new Date().toISOString().slice(0, 10);
+  document.getElementById('w-date').value = today;
+  document.getElementById('d-date').value = today;
+  loadWatchData();
+};
+
+function switchTab(tab) {
+  document.getElementById('view-watch').style.display = tab === 'watch' ? 'block' : 'none';
+  document.getElementById('view-diary').style.display = tab === 'diary' ? 'block' : 'none';
+  document.getElementById('nav-watch').classList.toggle('active', tab === 'watch');
+  document.getElementById('nav-diary').classList.toggle('active', tab === 'diary');
+  if (tab === 'diary' && diaryData.length === 0) {
+    loadDiaryData();
+  }
+}
+
+function loadWatchData() {
+  google.script.run.withSuccessHandler(data => {
+    watchData = data || [];
+    renderWatch();
+  }).getWatchEntries();
+}
+
+function loadDiaryData() {
+  google.script.run.withSuccessHandler(data => {
+    diaryData = data || [];
+    renderDiary();
+  }).getDiaryEntries(150);
+}
+
+function setStatusFilter(val, el) {
+  statusFilter = val;
+  document.querySelectorAll('#status-chips .chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  renderWatch();
+}
+
+function setCatFilter(val, el) {
+  catFilter = val;
+  platFilter = 'ALL';
+  document.querySelectorAll('#cat-chips .chip').forEach(c => c.classList.remove('active-green'));
+  el.classList.add('active-green');
+  renderWatch();
+}
+
+function setPlatFilter(val, el) {
+  platFilter = val;
+  catFilter = 'ALL';
+  document.querySelectorAll('#cat-chips .chip').forEach(c => c.classList.remove('active-green'));
+  el.classList.add('active-green');
+  renderWatch();
+}
+
+function renderWatch() {
+  const q = document.getElementById('watch-search').value.trim().toLowerCase();
+  const sortMode = document.getElementById('watch-sort').value;
+
+  let list = watchData.filter(item => {
+    if (statusFilter !== 'ALL' && item.status !== statusFilter) return false;
+    if (catFilter !== 'ALL' && item.category !== catFilter) return false;
+    if (platFilter !== 'ALL' && !item.platform.includes(platFilter)) return false;
+    if (q) {
+      const hay = `${item.title} ${item.cast} ${item.staff} ${item.platform} ${item.memo}`.toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+
+  if (sortMode === 'rating_desc') {
+    list.sort((a, b) => (Number(b.rating) || 0) - (Number(a.rating) || 0) || b.watchDate.localeCompare(a.watchDate));
+  } else {
+    list.sort((a, b) => b.watchDate.localeCompare(a.watchDate) || b.id - a.id);
+  }
+
+  document.getElementById('watch-count').textContent = `表示中: ${list.length}件（全${watchData.length}件）`;
+  const container = document.getElementById('watch-list');
+  if (list.length === 0) {
+    container.innerHTML = '<div class="loading">該当する記録がありません</div>';
+    return;
+  }
+
+  const slice = list.slice(0, 80);
+  container.innerHTML = slice.map(item => {
+    const bClass = item.status === '進行中' ? 'b-inprog' : item.status === '完了' ? 'b-done' : 'b-todo';
+    const nextStatus = item.status === '進行中' ? '完了' : '進行中';
+    const nextLabel = item.status === '進行中' ? '✅ 完了にする' : '▶ 進行中に戻す';
+    const stars = item.rating ? '★'.repeat(Number(item.rating)) : '';
+    return `
+      <div class="card" id="wcard-${item.row}">
+        <div class="card-head">
+          <div class="card-title">${esc(item.title)}</div>
+          <span class="badge ${bClass}">${esc(item.status || '未設定')}</span>
+        </div>
+        <div class="meta-row">
+          <span class="tag-pill">${esc(item.category)}</span>
+          ${item.watchDate ? `<span>📅 ${esc(item.watchDate)}</span>` : ''}
+          ${item.releaseYear ? `<span>(${esc(item.releaseYear)})</span>` : ''}
+          ${stars ? `<span style="color:#f59e0b;font-weight:700;">${stars}</span>` : ''}
+        </div>
+        ${item.platform ? `<div class="meta-row"><span class="tag-pill">📺 ${esc(item.platform)}</span></div>` : ''}
+        ${item.cast ? `<div class="card-cast">👥 ${esc(item.cast)}</div>` : ''}
+        ${item.summary ? `<div class="card-summary">${esc(item.summary)}</div>` : ''}
+        ${item.memo ? `<div class="card-cast">📝 ${esc(item.memo)}</div>` : ''}
+        <div class="card-actions">
+          <button class="btn-sm success" onclick="quickUpdate(${item.row}, {status:'${nextStatus}'})">${nextLabel}</button>
+          <select class="btn-sm" onchange="if(this.value) quickUpdate(${item.row}, {rating:this.value})">
+            <option value="">評価変更</option>
+            <option value="5">★5</option><option value="4">★4</option>
+            <option value="3">★3</option><option value="2">★2</option><option value="1">★1</option>
+          </select>
+          <button class="btn-sm primary" onclick="quickUpdate(${item.row}, {runWiki:true})">🌐 Wikipedia補完</button>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function quickUpdate(row, changes) {
+  const card = document.getElementById(`wcard-${row}`);
+  if (card) card.style.opacity = '0.5';
+  google.script.run.withSuccessHandler(updated => {
+    const idx = watchData.findIndex(x => x.row === row);
+    if (idx >= 0) watchData[idx] = updated;
+    renderWatch();
+  }).updateWatchCard({ row, ...changes });
+}
+
+function renderDiary() {
+  const q = document.getElementById('diary-search').value.trim().toLowerCase();
+  const ym = document.getElementById('diary-ym').value;
+  const list = diaryData.filter(d => {
+    if (ym && !d.date.startsWith(ym)) return false;
+    if (q) {
+      const hay = `${d.title} ${d.body} ${d.location}`.toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+  document.getElementById('diary-count').textContent = `表示中: ${list.length}件（直近取得${diaryData.length}件）`;
+  const container = document.getElementById('diary-list');
+  if (list.length === 0) {
+    container.innerHTML = '<div class="loading">該当する日記がありません</div>';
+    return;
+  }
+  container.innerHTML = list.map(d => `
+    <div class="card">
+      <div class="card-head">
+        <div class="card-title">${esc(d.date)} (${esc(d.weekday)}) ${esc(d.title || '')}</div>
+      </div>
+      ${d.location ? `<div class="meta-row"><span>📍 ${esc(d.location)}</span></div>` : ''}
+      <div class="card-summary" style="white-space:pre-wrap;">${esc(d.body)}</div>
+      ${d.imageUrls.length > 0 ? `<div class="meta-row" style="margin-top:8px;">${d.imageUrls.map((u, i) => `<a class="q-link" target="_blank" href="${esc(u)}">📷 写真${i + 1}</a>`).join('')}</div>` : ''}
+    </div>
+  `).join('');
+}
+
+function openWatchModal() { document.getElementById('modal-watch').classList.add('open'); }
+function openDiaryModal() { document.getElementById('modal-diary').classList.add('open'); }
+function closeModals() {
+  document.getElementById('modal-watch').classList.remove('open');
+  document.getElementById('modal-diary').classList.remove('open');
+}
+
+function submitWatch() {
+  const title = document.getElementById('w-title').value.trim();
+  if (!title) { alert('タイトルを入力してください'); return; }
+  const btn = document.getElementById('btn-save-watch');
+  btn.disabled = true; btn.textContent = '保存中...';
+
+  const payload = {
+    title,
+    category: document.getElementById('w-cat').value,
+    platform: document.getElementById('w-plat').value,
+    status: document.getElementById('w-status').value,
+    rating: document.getElementById('w-rating').value,
+    watchDate: document.getElementById('w-date').value,
+    memo: document.getElementById('w-memo').value,
+    autoWiki: document.getElementById('w-wiki').checked,
+  };
+  google.script.run.withSuccessHandler(() => {
+    btn.disabled = false; btn.textContent = '保存する';
+    document.getElementById('w-title').value = '';
+    document.getElementById('w-memo').value = '';
+    closeModals();
+    loadWatchData();
+  }).addWatchEntry(payload);
+}
+
+async function submitDiary() {
+  const body = document.getElementById('d-body').value.trim();
+  if (!body) { alert('本文を入力してください'); return; }
+  const btn = document.getElementById('btn-save-diary');
+  btn.disabled = true; btn.textContent = 'アップロード中...';
+
+  const files = Array.from(document.getElementById('d-photos').files || []);
+  const photos = [];
+  for (const f of files) {
+    photos.push(await resizeImageToJpgBase64(f, 1200, 0.8));
+  }
+
+  const payload = {
+    date: document.getElementById('d-date').value,
+    title: document.getElementById('d-title').value,
+    location: document.getElementById('d-loc').value,
+    body,
+    photos,
+  };
+  google.script.run.withSuccessHandler(() => {
+    btn.disabled = false; btn.textContent = '日記を保存する';
+    document.getElementById('d-title').value = '';
+    document.getElementById('d-body').value = '';
+    document.getElementById('d-photos').value = '';
+    closeModals();
+    switchTab('diary');
+    loadDiaryData();
+  }).addDiaryEntry(payload);
+}
+
+function resizeImageToJpgBase64(file, maxDim, quality) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = new Image();
+      img.onload = () => {
+        let w = img.width, h = img.height;
+        if (Math.max(w, h) > maxDim) {
+          if (w >= h) { h = Math.round(h * maxDim / w); w = maxDim; }
+          else { w = Math.round(w * maxDim / h); h = maxDim; }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        const dataUrl = canvas.toDataURL('image/jpeg', quality);
+        resolve({ name: file.name, base64: dataUrl.split(',')[1] });
+      };
+      img.onerror = reject;
+      img.src = e.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function esc(str) {
+  return String(str || '').replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]));
+}
+</script>
+</body>
+</html>

@@ -10,6 +10,17 @@
  */
 
 const SHEET_NAME = '鑑賞記録DB';
+const WATCH_SS_ID = '1dvf7aVJA_B8SgkIB1qGzJztZ6hRPiA7SLb0xssY142E';
+const DIARY_SS_ID = '1_UnbcNhxtEkV7vLagxreIeyELbY3NBLU5bS8pp4YQ1A';
+const DIARY_SHEET_NAME = '日記DB';
+const JOURNAL_IMAGES_FOLDER_ID = '1kPfAX4TvDpMwokoinA2ga-nCwoePkLyo';
+const JOURNAL_DOCS_FOLDER_ID = '1GqzKeXduc0UF-3Mb8nihfs3SVMSbOPSI';
+const YEAR_DOC_IDS = {
+  '2023': '1kq2hbOtbA_oMDdZ9V1Zfduw8gXG3YhQr5K_HS-NfCr8',
+  '2024': '1zw5PJeGd0Ez5Z53Q9L337hwqB_zRzEHPn-ti6tsj8l8',
+  '2025': '1ad_I1JPnJyvkiIdL_2tAjDA0bearBM5mld9I0bzXyg8',
+  '2026': '114VekVP1Atik_cds8n_0N6rXmqRjO9l8GvETh570zKI',
+};
 const WIKI_USER_AGENT = 'LifelogNotionBot/1.0 (personal use)';
 const MAX_CAST = 20;
 
@@ -251,4 +262,232 @@ function fetchWikipediaInfo_(title) {
   }
 
   return { pageTitle, year, platforms, cast, staff: staff.slice(0, 10), summary };
+}
+
+// ============================================================================
+// Web アプリ (HTMLService) エンドポイント & API
+// ============================================================================
+
+function doGet() {
+  return HtmlService.createHtmlOutputFromFile('index')
+    .setTitle('ライフログ・ダッシュボード')
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no');
+}
+
+function getWatchEntries() {
+  const ss = SpreadsheetApp.openById(WATCH_SS_ID);
+  const sheet = ss.getSheetByName(SHEET_NAME);
+  const values = sheet.getDataRange().getValues();
+  if (values.length < 2) return [];
+
+  const entries = [];
+  for (let i = 1; i < values.length; i++) {
+    const r = values[i];
+    if (!r[COL.TITLE - 1]) continue;
+    entries.push({
+      row: i + 1,
+      id: r[COL.ID - 1],
+      title: String(r[COL.TITLE - 1] || ''),
+      category: String(r[COL.CATEGORY - 1] || 'その他'),
+      watchDate: formatDateVal_(r[COL.WATCH_DATE - 1]),
+      status: String(r[COL.STATUS - 1] || ''),
+      rating: String(r[COL.RATING - 1] || ''),
+      platform: String(r[COL.PLATFORM - 1] || ''),
+      releaseYear: String(r[COL.RELEASE_YEAR - 1] || ''),
+      cast: String(r[COL.CAST - 1] || ''),
+      staff: String(r[COL.STAFF - 1] || ''),
+      summary: String(r[COL.SUMMARY - 1] || ''),
+      memo: String(r[COL.MEMO - 1] || ''),
+      relatedUrl: String(r[COL.RELATED_URL - 1] || ''),
+      notionUrl: String(r[COL.NOTION_URL - 1] || ''),
+    });
+  }
+  return entries.reverse();
+}
+
+function addWatchEntry(payload) {
+  const ss = SpreadsheetApp.openById(WATCH_SS_ID);
+  const sheet = ss.getSheetByName(SHEET_NAME);
+  const lastRow = sheet.getLastRow();
+  const nextId = lastRow >= 2 ? Number(sheet.getRange(lastRow, COL.ID).getValue() || lastRow - 1) + 1 : 1;
+
+  const title = String(payload.title || '').trim();
+  const memo = String(payload.memo || '').trim();
+  const normPlat = normalizePlatforms_(String(payload.platform || ''), `${title} ${memo}`);
+  const watchDate = payload.watchDate || Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd');
+
+  const newRow = [
+    nextId,
+    false,
+    title,
+    payload.category || 'ドラマ',
+    watchDate,
+    payload.status || '進行中',
+    payload.rating || '',
+    normPlat,
+    '',
+    '',
+    '',
+    '',
+    memo,
+    payload.relatedUrl || '',
+    '',
+  ];
+  sheet.appendRow(newRow);
+  const insertedRow = sheet.getLastRow();
+
+  if (payload.autoWiki) {
+    enrichRow_(sheet, insertedRow);
+  }
+  return { ok: true, row: insertedRow };
+}
+
+function updateWatchCard(payload) {
+  const ss = SpreadsheetApp.openById(WATCH_SS_ID);
+  const sheet = ss.getSheetByName(SHEET_NAME);
+  const row = Number(payload.row);
+  if (row < 2) throw new Error('Invalid row');
+
+  if (payload.status !== undefined) {
+    sheet.getRange(row, COL.STATUS).setValue(payload.status);
+    if (payload.status === '完了' && !sheet.getRange(row, COL.WATCH_DATE).getValue()) {
+      sheet.getRange(row, COL.WATCH_DATE).setValue(Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd'));
+    }
+  }
+  if (payload.rating !== undefined) {
+    sheet.getRange(row, COL.RATING).setValue(payload.rating);
+  }
+  if (payload.runWiki) {
+    enrichRow_(sheet, row);
+  }
+  const r = sheet.getRange(row, 1, 1, 15).getValues()[0];
+  return {
+    row,
+    id: r[COL.ID - 1],
+    title: String(r[COL.TITLE - 1] || ''),
+    category: String(r[COL.CATEGORY - 1] || ''),
+    watchDate: formatDateVal_(r[COL.WATCH_DATE - 1]),
+    status: String(r[COL.STATUS - 1] || ''),
+    rating: String(r[COL.RATING - 1] || ''),
+    platform: String(r[COL.PLATFORM - 1] || ''),
+    releaseYear: String(r[COL.RELEASE_YEAR - 1] || ''),
+    cast: String(r[COL.CAST - 1] || ''),
+    staff: String(r[COL.STAFF - 1] || ''),
+    summary: String(r[COL.SUMMARY - 1] || ''),
+    memo: String(r[COL.MEMO - 1] || ''),
+  };
+}
+
+function getDiaryEntries(limit) {
+  const ss = SpreadsheetApp.openById(DIARY_SS_ID);
+  const sheet = ss.getSheetByName(DIARY_SHEET_NAME);
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return [];
+
+  const maxCount = limit || 120;
+  const startRow = Math.max(2, lastRow - maxCount + 1);
+  const values = sheet.getRange(startRow, 1, lastRow - startRow + 1, 13).getValues();
+  const out = [];
+  for (let i = values.length - 1; i >= 0; i--) {
+    const r = values[i];
+    out.push({
+      id: r[0],
+      date: formatDateVal_(r[1]),
+      weekday: String(r[2] || ''),
+      title: String(r[4] || ''),
+      body: String(r[5] || ''),
+      location: String(r[6] || ''),
+      imageCount: Number(r[7] || 0),
+      imageUrls: String(r[9] || '').split('\n').filter(Boolean),
+    });
+  }
+  return out;
+}
+
+function addDiaryEntry(payload) {
+  const dateStr = payload.date || Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd');
+  const year = dateStr.slice(0, 4);
+  const ym = dateStr.slice(0, 7);
+  const weekdays = ['日', '月', '火', '水', '木', '金', '土'];
+  const dt = new Date(dateStr + 'T00:00:00+09:00');
+  const weekday = weekdays[dt.getDay()] || '';
+  const title = String(payload.title || '').trim();
+  const body = String(payload.body || '').trim();
+  const location = String(payload.location || '').trim();
+
+  // 写真アップロード処理（リサイズ済みBase64を受信して journal_images/YYYY-MM/ へ保存）
+  const jpgNames = [];
+  const driveUrls = [];
+  let firstFileId = '';
+  const photos = payload.photos || [];
+  if (photos.length > 0) {
+    const ymFolder = getOrCreateSubfolder_(JOURNAL_IMAGES_FOLDER_ID, ym);
+    photos.forEach((p, idx) => {
+      const safeName = String(p.name || `photo_${idx + 1}.jpg`).replace(/\.[^.]+$/, '') + '.jpg';
+      const fileName = `${dateStr}_${safeName}`;
+      const bytes = Utilities.base64Decode(p.base64);
+      const blob = Utilities.newBlob(bytes, 'image/jpeg', fileName);
+      const file = ymFolder.createFile(blob);
+      jpgNames.push(fileName);
+      driveUrls.push(`https://drive.google.com/file/d/${file.getId()}/view`);
+      if (!firstFileId) firstFileId = file.getId();
+    });
+  }
+
+  const ss = SpreadsheetApp.openById(DIARY_SS_ID);
+  const sheet = ss.getSheetByName(DIARY_SHEET_NAME);
+  const lastRow = sheet.getLastRow();
+  const nextId = lastRow >= 2 ? Number(sheet.getRange(lastRow, 1).getValue() || lastRow - 1) + 1 : 1;
+  const imageFormula = firstFileId ? `=IMAGE("https://drive.google.com/uc?export=view&id=${firstFileId}")` : '';
+  const docId = YEAR_DOC_IDS[year] || '';
+  const docUrl = docId ? `https://docs.google.com/document/d/${docId}/edit` : '';
+
+  sheet.appendRow([
+    nextId,
+    dateStr,
+    weekday,
+    Utilities.formatDate(new Date(), 'Asia/Tokyo', 'HH:mm'),
+    title,
+    body,
+    location,
+    jpgNames.length,
+    jpgNames.join('\n'),
+    driveUrls.join('\n'),
+    imageFormula,
+    docUrl,
+    'webapp_entry',
+  ]);
+
+  // 年別ドキュメントへ追記
+  if (docId) {
+    const doc = DocumentApp.openById(docId);
+    const docBody = doc.getBody();
+    const hText = `${dateStr} (${weekday}) — ${title || '(無題)'}`;
+    docBody.appendParagraph(hText).setHeading(DocumentApp.ParagraphHeading.HEADING2);
+    if (location) docBody.appendParagraph(`📍 場所: ${location}`);
+    if (body) docBody.appendParagraph(body);
+    driveUrls.forEach((u, idx) => {
+      const p = docBody.appendParagraph(`📷 写真: ${jpgNames[idx]}`);
+      p.setLinkUrl(u);
+    });
+    docBody.appendHorizontalRule();
+    doc.saveAndClose();
+  }
+
+  return { ok: true, id: nextId, date: dateStr };
+}
+
+function getOrCreateSubfolder_(parentId, name) {
+  const parent = DriveApp.getFolderById(parentId);
+  const it = parent.getFoldersByName(name);
+  if (it.hasNext()) return it.next();
+  return parent.createFolder(name);
+}
+
+function formatDateVal_(val) {
+  if (!val) return '';
+  if (val instanceof Date) {
+    return Utilities.formatDate(val, 'Asia/Tokyo', 'yyyy-MM-dd');
+  }
+  return String(val).slice(0, 10);
 }
